@@ -9,7 +9,50 @@
     <hr>
     <div id="midi-status"></div>
     <hr>
-    <div id="midi-devices"></div>
+    <div id="midi-devices-input"></div>
+    <hr>
+    <div id="midi-devices-output"></div>
+    <hr>
+    <div>
+        <label for="channel-selector">Channel:</label>
+        <select id="channel-selector">
+            <option value="0">0</option>
+        </select>
+    </div>
+    <div>
+        <label for="velocity-selector">Velocity:</label>
+        <select id="velocity-selector">
+            <option value="0">0</option>
+        </select>
+    </div>
+    <div>
+        <button id="button-send">Send</button>
+    </div>
+    <div>
+        <button id="button-stop">Stop</button>
+    </div>
+    <hr>
+    <table id="buttons-table">
+        <tr id="first-row"></tr>
+    </table>
 </body>
+<style>
+    .midi-button {
+        width: 40px;
+        height: 40px;
+    }
+
+    .midi-button.pressed {
+        background-color: red;
+    }
+
+    #first-row .midi-button {
+        border-radius: 50%;
+    }
+
+    tr td:last-child .midi-button {
+        border-radius: 50%;
+    }
+</style>
 <script src="test.js"></script>
 </html>
