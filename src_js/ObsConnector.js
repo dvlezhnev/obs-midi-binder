@@ -1,7 +1,16 @@
+import {STREAM_STARTED, STREAM_STARTING, STREAM_STOPPED, STREAM_STOPPING} from "./StreamStatuses";
+
 const KEY_TO_SCENE_MAP = new Map();
 const SCENE_TO_KEY_MAP = new Map();
-let TRANSITIONS = [];
+const TRANSITIONS = new Map();
+let CURRENT_SCENE_KEY = null;
+let CURRENT_PREVIEW_SCENE_KEY = null;
 
+let STREAM_STATUS = STREAM_STOPPED;
+
+/**
+ * class ObsConnector
+ */
 export class ObsConnector {
     constructor() {
         this._connected = false;
@@ -28,8 +37,12 @@ export class ObsConnector {
 
     switchSceneWithTransition(transitionIndex) {
         this.obs.send("TransitionToProgram", {
-            "with-transition": {name: TRANSITIONS[transitionIndex]}
+            "with-transition": {name: TRANSITIONS.get(transitionIndex)}
         });
+    }
+
+    startStopStreaming() {
+        this.obs.send("StartStopStreaming");
     }
 
     _tryConnect() {
@@ -43,6 +56,10 @@ export class ObsConnector {
 
     }
 
+    _fireStreamStatus() {
+        console.log(STREAM_STATUS);
+    }
+
     __selfBind() {
         this.__onErrorHandler = this.__onErrorHandler.bind(this);
         this.__onSceneListLoaded = this.__onSceneListLoaded.bind(this);
@@ -50,11 +67,22 @@ export class ObsConnector {
         this.__onScenesChanged = this.__onScenesChanged.bind(this);
         this.__onSwitchScenes = this.__onSwitchScenes.bind(this);
         this.__onTransitionListLoaded = this.__onTransitionListLoaded.bind(this);
+        this.__onPreviewSceneInfoLoaded = this.__onPreviewSceneInfoLoaded.bind(this);
+        this.__loadPreviewScene = this.__loadPreviewScene.bind(this);
+        this.__onPreviewSceneChanged = this.__onPreviewSceneChanged.bind(this);
+        this.__onTransitionListChanged = this.__onTransitionListChanged.bind(this);
         this._tryConnect = this._tryConnect.bind(this);
+
+        this.__onStreamStarting = this.__onStreamStarting.bind(this);
+        this.__onStreamStarted = this.__onStreamStarted.bind(this);
+        this.__onStreamStopping = this.__onStreamStopping.bind(this);
+        this.__onStreamStopped = this.__onStreamStopped.bind(this);
     }
 
     __bindObsEvents() {
-        this.obs.on('error', this.__onErrorHandler)
+        this.obs.on('ConnectionClosed', () => console.log('ConnectionClosed'));
+        this.obs.on('ConnectionOpened', () => console.log('ConnectionOpened'));
+        this.obs.on('error', this.__onErrorHandler);
         this.obs.on('ScenesChanged', this.__onScenesChanged);
         this.obs.on('SwitchScenes', this.__onSwitchScenes);
         this.obs.on('SceneCollectionChanged', console.log);
@@ -66,9 +94,35 @@ export class ObsConnector {
         this.obs.on('SceneItemSelected', console.log);
         this.obs.on('SceneItemDeselected', console.log);
         //////////////////////////////////////////////////////////
-        this.obs.on('PreviewSceneChanged', console.log);
+        this.obs.on('PreviewSceneChanged', this.__onPreviewSceneChanged);
         this.obs.on('StudioModeSwitched', console.log);
+        //////////////////////////////////////////////////////////
+        this.obs.on('TransitionListChanged', this.__onTransitionListChanged);
+        //////////////////////////////////////////////////////////
+        this.obs.on('StreamStarting', this.__onStreamStarting);
+        this.obs.on('StreamStarted', this.__onStreamStarted);
+        this.obs.on('StreamStopping', this.__onStreamStopping);
+        this.obs.on('StreamStopped', this.__onStreamStopped);
+    }
 
+    __onStreamStarting() {
+        STREAM_STATUS = STREAM_STARTING;
+        this._fireStreamStatus()
+    }
+
+    __onStreamStarted() {
+        STREAM_STATUS = STREAM_STARTED;
+        this._fireStreamStatus()
+    }
+
+    __onStreamStopping() {
+        STREAM_STATUS = STREAM_STOPPING;
+        this._fireStreamStatus()
+    }
+
+    __onStreamStopped() {
+        STREAM_STATUS = STREAM_STOPPED;
+        this._fireStreamStatus()
     }
 
     __onErrorHandler(error) {
@@ -78,25 +132,29 @@ export class ObsConnector {
     __onSceneListLoaded(scenesData) {
         KEY_TO_SCENE_MAP.clear();
         SCENE_TO_KEY_MAP.clear();
-        console.log("current-scene", scenesData["current-scene"]);
-        console.log("scenes", scenesData.scenes);
         scenesData.scenes.forEach(scene => {
             this.__registerScene(scene.name);
-        })
+        });
+        this.__onCurrentSceneChanged(scenesData.currentScene);
     }
 
     __onTransitionListLoaded(transitionsData) {
-        TRANSITIONS = transitionsData.transitions.map(t => t.name);
+        TRANSITIONS.clear();
+        transitionsData.transitions.forEach(t => {
+            this.__registerTransition(t.name);
+        });
     }
 
     __onSwitchScenes(data) {
-        console.log(data);
         this.__onCurrentSceneChanged(data.sceneName);
     }
 
     __onScenesChanged(event) {
-        console.log(event);
         this.__reloadScenes()
+    }
+
+    __onTransitionListChanged(event) {
+        this.__reloadTransitions();
     }
 
     /**
@@ -113,16 +171,35 @@ export class ObsConnector {
         }
     }
 
+    /**
+     *
+     * @param {string} transitionName
+     * @private
+     */
+    __registerTransition(transitionName) {
+        let transitionId = getTransitionId(transitionName);
+        if (transitionId) {
+            TRANSITIONS.set(transitionId, transitionName);
+            console.log("Transition registered", transitionId, transitionName);
+        }
+    }
+
     __onObsConnected() {
         this._connected = true;
         this.__reloadScenes();
         this.__reloadTransitions();
+        this.__loadPreviewScene();
+        this.__enableStudioMode();
     }
 
     __reloadScenes() {
         this.obs.send("GetSceneList")
             .then(this.__onSceneListLoaded)
             .catch(this.__onErrorHandler);
+    }
+
+    __enableStudioMode() {
+        this.obs.send("EnableStudioMode");
     }
 
     __reloadTransitions() {
@@ -132,7 +209,24 @@ export class ObsConnector {
     }
 
     __onCurrentSceneChanged(newSceneName) {
-        console.log(newSceneName);
+        CURRENT_SCENE_KEY = getSceneId(newSceneName);
+        console.log("CURRENT_SCENE_KEY", CURRENT_SCENE_KEY);
+    }
+
+    __loadPreviewScene() {
+        this.obs.send("GetPreviewScene")
+            .then(this.__onPreviewSceneInfoLoaded)
+            .catch(this.__onErrorHandler);
+    }
+
+    __onPreviewSceneInfoLoaded(data) {
+        CURRENT_PREVIEW_SCENE_KEY = getSceneId(data.name);
+        console.log("CURRENT_PREVIEW_SCENE_KEY", CURRENT_PREVIEW_SCENE_KEY);
+    }
+
+    __onPreviewSceneChanged(data) {
+        CURRENT_PREVIEW_SCENE_KEY = getSceneId(data["scene-name"]);
+        console.log("CURRENT_PREVIEW_SCENE_KEY", CURRENT_PREVIEW_SCENE_KEY);
     }
 }
 
@@ -144,6 +238,18 @@ function getSceneId(sceneName) {
     let parseReg = /^(([1-8])\.([1-8])\.)(.*)/;
     if (parseReg.test(sceneName)) {
         return sceneName.match(parseReg)[1];
+    }
+    return null;
+}
+
+/**
+ * @param {string} transitionName
+ * @return {(string|null)}
+ */
+function getTransitionId(transitionName) {
+    let parseReg = /^(([1-8])\.)(.*)/;
+    if (parseReg.test(transitionName)) {
+        return transitionName.match(parseReg)[1];
     }
     return null;
 }
