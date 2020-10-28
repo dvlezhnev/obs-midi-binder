@@ -17,6 +17,10 @@ export class ObsConnector {
         this.obs = new OBSWebSocket();
         this.__selfBind();
         this.__bindObsEvents()
+        this.onScenesListChanged = () => {};
+        this.onPreviewSceneChanged = () => {};
+        this.onCurrentSceneChanged = () => {};
+        this.onStreamStatusChanged = () => {};
     }
 
     start() {
@@ -58,6 +62,7 @@ export class ObsConnector {
 
     _fireStreamStatus() {
         console.log(STREAM_STATUS);
+        this.onStreamStatusChanged(STREAM_STATUS);
     }
 
     __selfBind() {
@@ -135,6 +140,7 @@ export class ObsConnector {
         scenesData.scenes.forEach(scene => {
             this.__registerScene(scene.name);
         });
+        this.onScenesListChanged(Array.from(KEY_TO_SCENE_MAP.keys()));
         this.__onCurrentSceneChanged(scenesData.currentScene);
     }
 
@@ -190,6 +196,7 @@ export class ObsConnector {
         this.__reloadTransitions();
         this.__loadPreviewScene();
         this.__enableStudioMode();
+        this.onStreamStatusChanged(STREAM_STATUS);
     }
 
     __reloadScenes() {
@@ -209,8 +216,9 @@ export class ObsConnector {
     }
 
     __onCurrentSceneChanged(newSceneName) {
-        CURRENT_SCENE_KEY = getSceneId(newSceneName);
-        console.log("CURRENT_SCENE_KEY", CURRENT_SCENE_KEY);
+        const newSceneId = getSceneId(newSceneName);
+        this.onCurrentSceneChanged(CURRENT_SCENE_KEY, newSceneId);
+        CURRENT_SCENE_KEY = newSceneId;
     }
 
     __loadPreviewScene() {
@@ -220,13 +228,15 @@ export class ObsConnector {
     }
 
     __onPreviewSceneInfoLoaded(data) {
-        CURRENT_PREVIEW_SCENE_KEY = getSceneId(data.name);
-        console.log("CURRENT_PREVIEW_SCENE_KEY", CURRENT_PREVIEW_SCENE_KEY);
+        const newSceneId = getSceneId(data.name);
+        this.onPreviewSceneChanged(CURRENT_PREVIEW_SCENE_KEY, newSceneId);
+        CURRENT_PREVIEW_SCENE_KEY = newSceneId;
     }
 
     __onPreviewSceneChanged(data) {
-        CURRENT_PREVIEW_SCENE_KEY = getSceneId(data["scene-name"]);
-        console.log("CURRENT_PREVIEW_SCENE_KEY", CURRENT_PREVIEW_SCENE_KEY);
+        const newSceneId = getSceneId(data["scene-name"]);
+        this.onPreviewSceneChanged(CURRENT_PREVIEW_SCENE_KEY, newSceneId);
+        CURRENT_PREVIEW_SCENE_KEY = newSceneId;
     }
 }
 
