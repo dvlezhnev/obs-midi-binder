@@ -3,6 +3,7 @@ import {STREAM_STARTED, STREAM_STARTING, STREAM_STOPPED, STREAM_STOPPING} from "
 const KEY_TO_SCENE_MAP = new Map();
 const SCENE_TO_KEY_MAP = new Map();
 const TRANSITIONS = new Map();
+const AUDIO_SOURCES = new Map();
 let CURRENT_SCENE_KEY = null;
 let CURRENT_PREVIEW_SCENE_KEY = null;
 
@@ -21,6 +22,9 @@ export class ObsConnector {
         this.onPreviewSceneChanged = () => {};
         this.onCurrentSceneChanged = () => {};
         this.onStreamStatusChanged = () => {};
+        this.onTransitionListLoaded = () => {};
+        this.onAudioListLoaded = () => {};
+        this.onAudioMuteChange = () => {};
     }
 
     start() {
@@ -45,6 +49,16 @@ export class ObsConnector {
         });
     }
 
+    muteUnmuteAudio(audioId) {
+        console.log(audioId);
+        if (AUDIO_SOURCES.has(audioId)) {
+            console.log(AUDIO_SOURCES);
+            this.obs.send("ToggleMute", {
+                "source": AUDIO_SOURCES.get(audioId)
+            });
+        }
+    }
+
     startStopStreaming() {
         this.obs.send("StartStopStreaming");
     }
@@ -53,7 +67,7 @@ export class ObsConnector {
         this.obs.connect({
             address: 'localhost:4444'
         }).then(this.__onObsConnected)
-            .catch(this._tryConnect)
+            .catch(this.__onErrorHandler)
     }
 
     __unbindEvents() {
@@ -82,6 +96,10 @@ export class ObsConnector {
         this.__onStreamStarted = this.__onStreamStarted.bind(this);
         this.__onStreamStopping = this.__onStreamStopping.bind(this);
         this.__onStreamStopped = this.__onStreamStopped.bind(this);
+
+        this.__sourcesListLoaded = this.__sourcesListLoaded.bind(this);
+        this.__onSourceMuteStateChanged = this.__onSourceMuteStateChanged.bind(this);
+        this.__onSourceRenamed = this.__onSourceRenamed.bind(this);
     }
 
     __bindObsEvents() {
@@ -108,6 +126,24 @@ export class ObsConnector {
         this.obs.on('StreamStarted', this.__onStreamStarted);
         this.obs.on('StreamStopping', this.__onStreamStopping);
         this.obs.on('StreamStopped', this.__onStreamStopped);
+
+        this.obs.on('SourceMuteStateChanged', this.__onSourceMuteStateChanged);
+        this.obs.on('SourceRenamed', this.__onSourceRenamed);
+    }
+
+    __onSourceMuteStateChanged(data) {
+        const audioSourceId = getAudioSourceId(data.sourceName);
+        if (audioSourceId) {
+            this.onAudioMuteChange(audioSourceId, data.muted);
+        }
+    }
+
+    __onSourceRenamed(data) {
+        const newAudioSourceId = getAudioSourceId(data.newName);
+        const prevAudioSourceId = getAudioSourceId(data.previousName);
+        if (newAudioSourceId || prevAudioSourceId) {
+            this.__reloadAudioSources();
+        }
     }
 
     __onStreamStarting() {
@@ -149,6 +185,7 @@ export class ObsConnector {
         transitionsData.transitions.forEach(t => {
             this.__registerTransition(t.name);
         });
+        this.onTransitionListLoaded(Array.from(TRANSITIONS.keys()));
     }
 
     __onSwitchScenes(data) {
@@ -187,6 +224,8 @@ export class ObsConnector {
         if (transitionId) {
             TRANSITIONS.set(transitionId, transitionName);
             console.log("Transition registered", transitionId, transitionName);
+        } else if (transitionName.toLowerCase() === "обрезка" || transitionName.toLowerCase() === "cut") {
+            TRANSITIONS.set("1", transitionName);
         }
     }
 
@@ -196,6 +235,7 @@ export class ObsConnector {
         this.__reloadTransitions();
         this.__loadPreviewScene();
         this.__enableStudioMode();
+        this.__reloadAudioSources();
         this.onStreamStatusChanged(STREAM_STATUS);
     }
 
@@ -213,6 +253,38 @@ export class ObsConnector {
         this.obs.send("GetTransitionList")
             .then(this.__onTransitionListLoaded)
             .catch(this.__onErrorHandler);
+    }
+
+    __reloadAudioSources() {
+        this.obs.send("GetSourcesList")
+            .then(this.__sourcesListLoaded)
+            .catch(this.__onErrorHandler);
+    }
+
+    __sourcesListLoaded(data) {
+        AUDIO_SOURCES.clear();
+        data.sources.forEach(source => {
+            this.__registerAudioSource(source.name);
+        });
+        this.onAudioListLoaded(Array.from(AUDIO_SOURCES.keys()));
+    }
+
+    /**
+     *
+     * @param {string} sourceName
+     * @private
+     */
+    __registerAudioSource(sourceName) {
+        let audioSourceId = getAudioSourceId(sourceName);
+        if (audioSourceId) {
+            AUDIO_SOURCES.set(audioSourceId, sourceName);
+            console.log("Audio source registered", audioSourceId, sourceName);
+
+            this.obs.sendCallback("GetMute", {source: sourceName}, (error, data) => {
+                if (error) return;
+                this.onAudioMuteChange(audioSourceId, data.muted);
+            })
+        }
     }
 
     __onCurrentSceneChanged(newSceneName) {
@@ -257,9 +329,21 @@ function getSceneId(sceneName) {
  * @return {(string|null)}
  */
 function getTransitionId(transitionName) {
-    let parseReg = /^(([1-8])\.)(.*)/;
+    let parseReg = /^(([1-3])\.)(.*)/;
     if (parseReg.test(transitionName)) {
         return transitionName.match(parseReg)[1];
+    }
+    return null;
+}
+
+/**
+ * @param {string} sourceName
+ * @return {(string|null)}
+ */
+function getAudioSourceId(sourceName) {
+    let parseReg = /^(([1-4])\.audio\.)(.*)/;
+    if (parseReg.test(sourceName)) {
+        return sourceName.match(parseReg)[1];
     }
     return null;
 }
