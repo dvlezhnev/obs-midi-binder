@@ -257,10 +257,9 @@ function clearAllAudio() {
 }
 
 function setAudioMuteState(key, state) {
-    console.log(arguments);
     const i = parseInt(key);
     if (i < 5) {
-        const note = 49 + i * 10;
+        const note = 49 + (5 - i) * 10;
         const velocity = state ? 5 : 122;
         L_OUTPUT.send([0x90, note, velocity]);
     }
@@ -272,7 +271,7 @@ function setAudioMuteState(key, state) {
 function loadAudioKeys(data) {
     console.log(data);
     data.sort().slice(0, 4).forEach((key, i) => {
-        let note = 59 + i * 10;
+        let note = 59 + (3 - i) * 10;
         AUDIO_MAP.set(note, key);
     })
 }
