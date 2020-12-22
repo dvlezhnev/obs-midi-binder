@@ -252,7 +252,7 @@
         }
 
         __enableStudioMode() {
-            this.obs.send("EnableStudioMode");
+            this.obs.send("EnableStudioMode").catch(e => this.__onErrorHandler(e));
         }
 
         __reloadTransitions() {
@@ -449,6 +449,7 @@
         }
 
         _onMidiMessage(event) {
+            console.log(event);
             const data = event.data;
             const note = data[1];
             const velocity = data[2];
