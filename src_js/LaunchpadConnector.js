@@ -97,6 +97,7 @@ export class LaunchpadConnector {
     }
 
     _onMidiMessage(event) {
+        console.log(event);
         const data = event.data;
         const note = data[1];
         const velocity = data[2];

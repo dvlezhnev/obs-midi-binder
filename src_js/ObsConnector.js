@@ -246,7 +246,7 @@ export class ObsConnector {
     }
 
     __enableStudioMode() {
-        this.obs.send("EnableStudioMode");
+        this.obs.send("EnableStudioMode").catch(e => this.__onErrorHandler(e));
     }
 
     __reloadTransitions() {
