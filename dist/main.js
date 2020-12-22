@@ -441,6 +441,7 @@
                     L_OUTPUT = output;
                 }
             }
+            this._obs.start();
         }
 
         _onMidiAccessStateChange(data) {
@@ -633,6 +634,6 @@
     window.connector = connector;
     window.launchpadConnector = new LaunchpadConnector(connector);
 
-    connector.start();
+    // connector.start();
 
 }());
