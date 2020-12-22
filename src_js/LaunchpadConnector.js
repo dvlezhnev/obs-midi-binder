@@ -89,6 +89,7 @@ export class LaunchpadConnector {
                 L_OUTPUT = output;
             }
         }
+        this._obs.start();
     }
 
     _onMidiAccessStateChange(data) {

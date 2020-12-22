@@ -6,4 +6,4 @@ const connector = new ObsConnector();
 window.connector = connector;
 window.launchpadConnector = new LaunchpadConnector(connector);
 
-connector.start();
+// connector.start();
